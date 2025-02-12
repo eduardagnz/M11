@@ -1,0 +1,128 @@
+---
+title: "artefato_semana1_falhas.rmd"
+output: html_document
+date: "2025-02-06"
+---
+
+# Exploração da tabela]
+
+```{r}
+library(readr)
+
+InteliVeiculo <- read_csv("C:/Users/Inteli/Documents/M11/M11/Semana 1/3.Status/InteliVeiculo.csv")
+
+head(InteliVeiculo)
+```
+
+```{r}
+raw_data <- InteliVeiculo
+raw_data
+
+```
+# Visões
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+```
+
+## Quantidade modelos
+```{r}
+# Agrupar total de fabricação por modelo
+modelos_mais_fabricados <- raw_data %>%
+  group_by(MODELL) %>%
+  summarise(qtd_fabricada = n(), .groups = "drop") %>%
+  arrange(desc(qtd_fabricada))
+
+# Criar gráfico de barras
+grafico <- ggplot(modelos_mais_fabricados, aes(x = reorder(MODELL, qtd_fabricada), y = qtd_fabricada, fill = MODELL)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = qtd_fabricada), hjust = -0.2, size = 4) +  # Adiciona número total de cada modelo
+  coord_flip() +  # Inverte para leitura mais fácil
+  labs(title = "Modelos mais fabricados",
+       x = "Modelo",
+       y = "Quantidade Fabricada") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Remove legenda desnecessária
+
+# Converter para gráfico interativo
+ggplotly(grafico)
+
+```
+## Variação de cores por modelo
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+# Contar variações de cor por modelo
+variacoes_cor <- raw_data %>%
+  group_by(MODELL, FARBAU, FARBIN) %>%
+  summarise(qtd = n(), .groups = "drop") %>%
+  group_by(MODELL) %>%
+  summarise(qtd_variacoes = n(), .groups = "drop") %>%
+  arrange(desc(qtd_variacoes))
+
+# Criar gráfico de barras
+grafico <- ggplot(variacoes_cor, aes(x = reorder(MODELL, qtd_variacoes), y = qtd_variacoes, fill = MODELL)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = qtd_variacoes), hjust = -0.2, size = 4) +  # Exibe número total
+  coord_flip() +  # Inverte para facilitar leitura
+  labs(title = "Variações de Cor (FARBAU + FARBIN) por Modelo",
+       x = "Modelo",
+       y = "Quantidade de Variações") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Remove legenda
+
+# Converter para gráfico interativo
+ggplotly(grafico)
+
+```
+
+## Variações possivei por modelo
+```{r}
+
+# Contar variações únicas (FARBAU + FARBIN + PR) por modelo
+variacoes_completas <- raw_data %>%
+  group_by(MODELL, FARBAU, FARBIN, PR) %>%
+  summarise(qtd = n(), .groups = "drop") %>%
+  group_by(MODELL) %>%
+  summarise(qtd_variacoes = n(), .groups = "drop") %>%
+  arrange(desc(qtd_variacoes))
+
+# Criar gráfico de barras
+grafico <- ggplot(variacoes_completas, aes(x = reorder(MODELL, qtd_variacoes), y = qtd_variacoes, fill = MODELL)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = qtd_variacoes), hjust = -0.2, size = 4) +  # Exibe número total
+  coord_flip() +  # Inverte para facilitar leitura
+  labs(title = "Variações de Cores e Configurações por Modelo",
+       x = "Modelo",
+       y = "Quantidade de Variações") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Remove legenda
+
+# Converter para gráfico interativo
+ggplotly(grafico)
+
+```
+
+# Relatório
+
+Todas as colunas desta tabela são essenciais para o projeto, sem necessidade de alterações. Além disso, acreditamos que algumas visões histogramas,boxplots para visualizar outliers e graficos de disperção não são nescessarios nessa analise. Ja que representam apenas veiculos existentes, não seria nescessario remover os outliers.
+
+### 📌 Colunas e Descrição
+
+-   **`ID`** → Identificador único do carro.\
+-   **`MODELL`** → Código do modelo e motorização (6 caracteres):
+    -   **Exemplo:** `BZ3-2-K-3`
+        -   `BZ3` → Modelo Polo PA\
+        -   `2` → Versão Highline\
+        -   `K` → Motorização 1.4 TSI\
+        -   `3` → Câmbio Manual\
+-   **`FARBAU`** → Cor externa.\
+-   **`FARBIN`** → Cor interna.\
+-   **`ZIEL_LAND`** → País de destino.\
+-   **`PR`** → Configuração do carro no padrão `FFF:CCC`.
+    -   **Exemplo:** `MOT:M7B` → (`MOT` = família motor, `M7B` = motor a ser montado)\
+    -   Algumas famílias podem ter múltiplas configurações.
