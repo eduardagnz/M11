@@ -1,0 +1,131 @@
+---
+title: "artefato_semana1_falhas.rmd"
+output: html_document
+date: "2025-02-06"
+---
+
+# Exploração da tabela
+
+```{r}
+head(InteliResultados, n=5)
+unique(InteliResultados$STATUS)
+```
+
+# Limpeza das colunas
+
+Vamos apenas alterar o campo `STATUS` de chr para binario
+
+```{r}
+
+
+library(readr)
+
+# Lendo o CSV
+raw_data <- read_csv("./InteliResultados.csv",show_col_types = FALSE)
+
+raw_data$STATUS <- ifelse(raw_data$STATUS=="OK",1,0)
+
+# Exibir primeiras linhas
+head(raw_data)
+
+```
+# Visões
+
+```{r}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(plotly)
+```
+
+
+## Taxa de erros por data
+```{r}
+# Convertendo CAPTURE_TIME para data e hora correta
+dados <- raw_data %>%
+  mutate(CAPTURE_TIME = ymd_hms(gsub("-", " ", CAPTURE_TIME))) %>%
+  mutate(DATE = as.Date(CAPTURE_TIME))  # Criando coluna com a data
+
+# Contar quantos OK e NOTOK temos por dia
+resumo <- dados %>%
+  group_by(DATE, STATUS) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(STATUS = ifelse(STATUS == 1, "OK", "NOTOK"))
+
+# Criar gráfico de linhas duplo
+grafico <- ggplot(resumo, aes(x = DATE, y = count, color = STATUS, group = STATUS)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +  # Adiciona pontos para melhor visualização
+  labs(title = "Evolução de OK e NOTOK por Dia",
+       x = "Data",
+       y = "Quantidade",
+       color = "Status") +
+  theme_minimal()
+
+# Converter para gráfico interativo
+ggplotly(grafico)
+
+```
+
+
+##Rankeamento de categorias que mais dão erros.
+```{r}
+
+# Agrupar total de erros por categoria e calcular percentual
+erros_por_categoria <- raw_data %>%
+  filter(STATUS == 0) %>%  # Filtra apenas erros (NOTOK)
+  group_by(RESULT_DESCRIPTION) %>%
+  summarise(qtd_erros = n(), .groups = "drop") %>%
+  mutate(percentual = (qtd_erros / sum(qtd_erros)) * 100) %>%  # Calcula percentual
+  arrange(desc(qtd_erros))  # Ordena do maior para o menor
+
+# Criar gráfico de barras com total e percentual
+grafico <- ggplot(erros_por_categoria, aes(x = reorder(RESULT_DESCRIPTION, qtd_erros), y = qtd_erros, fill = RESULT_DESCRIPTION)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(qtd_erros, " (", round(percentual, 1), "%)")), 
+            hjust = -0.2, size = 4) +  # Adiciona rótulo com total e percentual
+  coord_flip() +  # Inverte para melhor visualização
+  labs(title = "Ranking de Categorias com Mais Erros (NOTOK)",
+       x = "Categoria",
+       y = "Quantidade de Erros") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Remove legenda desnecessária
+
+# Converter para gráfico interativo
+ggplotly(grafico)
+
+```
+
+
+# Relatório
+
+## Descrição da Tabela
+
+A tabela registra os status de verificações associadas a veículos.
+
+## Modificações e Estrutura
+
+-   **Removido**: `RESULT_DESCRIPTION` (redundante, já representado por `RESULT_ID`).
+-   **Alterado**: `STATUS` convertido para binário (`0 = NOTOK`, `1 = OK`) para escalabilidade.
+-   **Mantidos**:
+    -   `DATAHORA`: Registro temporal.
+    -   `RESULT_ID`: Identifica o tipo de verificação.
+    -   `ID_CARRO`: Mantido para futuras análises por veículo.
+
+## Observações
+
+-   Atualmente, todos os status são `NOTOK`, mas a estrutura suporta ambos (`OK` e `NOTOK`).
+-   Permite consultas por veículo (`ID_CARRO`) e por tipo de verificação (`RESULT_ID`).
+
+### Estrutura da Tabela
+
+-   **`ID`** → Identificação do veículo (chave estrangeira).\
+-   **`RESULT_ID`** → Código do resultado do teste.\
+-   **`CAPTURE_TIME`** → Data e hora do recebimento do resultado.\
+-   **`STATUS`** → Status do teste (**0** ou **1**).
+
+### Regras e Considerações
+
+1.  **Resultados condicionais à configuração do veículo**
+    -   Nem todos os veículos passam pelos mesmos testes.\
+    -   Exemplo: Apenas modelos com ar-condicionado recebem o teste de carga de gás.

@@ -1,0 +1,185 @@
+---
+title: "artefato_semana1_falhas.rmd"
+output: html_document
+date: "2025-02-06"
+---
+
+# Exploração da tabela
+
+```{r}
+raw_data_status <- InteliStatus
+InteliStatus
+```
+
+# Relatório
+
+### Visão Geral
+
+Iremos usar todos os campos.
+
+Esta tabela registra a passagem dos veículos por diferentes **posições do processo produtivo**, armazenando o status, a data e a hora da movimentação. A extração dessas informações permitirá análise de **tempo de produção** e **eventuais atrasos**.
+
+Embora a maioria dos veículos receba um status em cada etapa, há **raras exceções** onde isso pode não ocorrer.
+
+------------------------------------------------------------------------
+
+### Estrutura da Tabela
+
+-   **`ID`** → Identificação do veículo (**PK**).\
+-   **`STATUS`** → Status do veículo dentro do processo produtivo.\
+-   **`STATUS_DATA`** → Data e hora da associação do status ao veículo.
+
+### Exemplo Prático – Analisando o Tempo na Pintura
+
+Suponha que um veículo tenha os seguintes registros na etapa de **Pintura**:
+
+| ID Veículo | STATUS | STATUS_DATA |
+|------------|--------|-------------|
+| 67890      | L501   | 11:45:00    |
+| 67890      | L800   | 11:50:00    |
+
+Podemos calcular o tempo entre **L501** e **L800**:
+
+**Diferença de tempo** = `11:45:00 - 10:50:00` = **5 minutos**
+
+# Calculando o tempo médio de cada carro.
+
+```{r}
+library(dplyr)
+library(lubridate)
+dados <- InteliStatus %>%
+  mutate(STATUS_DATA = as.POSIXct(gsub("-", " ", STATUS_DATA), format="%Y %m %d %H.%M.%S"))
+
+# Agrupando por ID e calculando min, max e diferença de tempo
+resultado <- dados %>%
+  group_by(ID) %>%
+  summarise(
+    min_tempo = min(STATUS_DATA, na.rm = TRUE),
+    max_tempo = max(STATUS_DATA, na.rm = TRUE),
+    tempo_total = ifelse(is.na(min_tempo) | is.na(max_tempo),0, as.character(difftime(max_tempo, min_tempo, units = "secs")))
+  )
+
+print(resultado)
+```
+
+# Analise do tempo_total
+
+```{r}
+# Carrega os pacotes necessários
+library(dplyr)
+library(ggplot2)
+
+
+
+df <- resultado %>%
+  mutate(tempo_total_horas = as.numeric(tempo_total) / 3600)
+
+# 2. Criar faixas (bins) de 300 em 300 horas (de 0 até 3000)
+df <- df %>%
+  mutate(bin_horas = cut(tempo_total_horas,
+                         breaks = seq(0, 3000, by = 300),
+                         include.lowest = TRUE,
+                         right = FALSE))
+
+# 3. Agregar os dados contando quantos carros em cada faixa
+df_grouped <- df %>%
+  group_by(bin_horas) %>%
+  summarise(contagem = n()) %>%
+  ungroup()
+
+# Se desejar que o eixo X mostre a posição média de cada bin, calcule o ponto médio:
+df_grouped <- df_grouped %>%
+  mutate(
+    # Extrai o limite inferior e superior dos intervalos a partir do fator
+    limite_inferior = as.numeric(sub("\\[([^,]+),.*", "\\1", as.character(bin_horas))),
+    limite_superior = as.numeric(sub(".*,([^]]+)\\)", "\\1", as.character(bin_horas))),
+    ponto_medio = (limite_inferior + limite_superior) / 2
+  )
+
+df_grouped
+
+df_grouped_clean <- df_grouped %>%
+  filter(contagem > 5000)
+
+df_grouped_clean
+
+# Gráfico com eixo X configurado de 100 em 100 e eixo Y de 10k em 10k até 120k
+ggplot(df_grouped_clean, aes(x = ponto_medio, y = contagem)) +
+  geom_point(size = 5, color = "steelblue") +
+  geom_line(color = "steelblue", size = 1) +
+  scale_x_continuous(
+    name = "Tempo de Produção (horas)",
+    breaks = seq(0, 3000, by = 100)
+  ) +
+  scale_y_continuous(
+    name = "Quantidade de Carros",
+    breaks = seq(0, 120000, by = 10000),
+    limits = c(0, 120000)
+  ) +
+  labs(
+    title = "Distribuição de Carros por Tempo de Produção",
+    subtitle = "Agregado em intervalos de 300 horas (outliers removidos)",
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    axis.text = element_text(color = "gray30")
+  )
+```
+# Tempo médio da armação
+
+```{r}
+# Lista dos pontos da esteira (em ordem)
+status_armacao <- c("R210", "R213", "R500", "R549", "R780", "R800")
+
+# Converter STATUS_DATA para formato de data/hora
+raw_Data <- raw_data_status %>%
+  mutate(STATUS_DATA = ymd_hms(gsub("-", " ", STATUS_DATA)))  # Ajuste do formato
+
+# Calcular tempo entre pontos dentro de cada ID
+tempo_por_id <- raw_Data %>%
+  filter(STATUS %in% status_armacao) %>%  # Filtrar apenas pontos relevantes
+  arrange(ID, STATUS_DATA) %>%  # Ordenar por ID e tempo
+  group_by(ID) %>%
+  mutate(tempo_diferenca = difftime(lead(STATUS_DATA), STATUS_DATA, units = "secs"),
+         proximo_ponto = lead(STATUS)) %>%
+  filter(!is.na(tempo_diferenca)) %>%  # Remover linhas sem próximo ponto
+  ungroup()
+
+# Calcular média de tempo entre os pontos
+media_tempo_pontos <- tempo_por_id %>%
+  group_by(STATUS, proximo_ponto) %>%
+  summarise(tempo_medio = mean(tempo_diferenca, na.rm = TRUE), .groups = "drop") %>%
+  arrange(match(STATUS, status_armacao))  # Manter ordem correta
+
+# Criar gráfico de barras mostrando o tempo médio entre pontos
+grafico <- ggplot(media_tempo_pontos, aes(x = paste(STATUS, "→", proximo_ponto), y = tempo_medio, fill = STATUS)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(round(tempo_medio, 1), "s")), vjust = -0.5, size = 4) +  # Exibir tempo médio no gráfico
+  labs(title = "Tempo Médio entre os Pontos da Esteira",
+       x = "Transição entre Pontos",
+       y = "Tempo Médio (segundos)") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Remover legenda desnecessária
+
+# Tornar o gráfico interativo
+ggplotly(grafico)
+```
+```{r}
+library(dplyr)
+
+# Definindo o ID desejado
+id_desejado <- "2024-1422099"  # Substitua pelo ID que deseja filtrar
+
+# Filtrando o ID e ordenando pela data de forma crescente
+dados_filtrados <- InteliStatus %>%
+  filter(ID == id_desejado) %>%
+  arrange(STATUS_DATA)  # Ordena de forma crescente
+
+# Exibindo o resultado
+print(dados_filtrados)
+```
+
+
+
