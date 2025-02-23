@@ -1,0 +1,8 @@
+.env
+venv
+Lib
+Include
+pyvenv.cfg
+Scripts
+__pycache__
+.pytest_cache

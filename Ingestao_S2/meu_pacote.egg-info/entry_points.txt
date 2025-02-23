@@ -1,0 +1,5 @@
+[console_scripts]
+get_bulbasaur = src.api:get_bulbasaur
+get_charmander = src.api:get_charmander
+get_squirtle = src.api:get_squirtle
+
